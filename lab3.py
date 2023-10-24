@@ -2,30 +2,52 @@ from threading import Thread
 import csv
 import time
 import psutil
-import pynput.mouse as mouse
+import pynput.mouse
 import codecs
 
-def get_cpu_metrics():
-    cpu_percent = psutil.cpu_percent(interval=1)
-    return round(cpu_percent, 2)
 
-def get_mouse_metrics():
-    mouse_seconds = mouse.Controller().position[0]
-    return int(mouse_seconds)
+class MetricsThread(Thread):
+    def __init__(self, metric_name, interval):
+        super().__init__()
+        self.metric_name = metric_name
+        self.interval = interval
+        self.running = True
 
-def save_metrics():
-    while True:
-        current_time = time.strftime('%Y-%m-%d %H:%M:%S')
-
-        cpu_metrics = get_cpu_metrics()
-        mouse_metrics = get_mouse_metrics()
-
+    def run(self):
         with codecs.open('metrics.csv', '+a', encoding='utf-8') as file:
             writer = csv.writer(file)
-            writer.writerow([current_time, 'CPU', cpu_metrics])
-            writer.writerow([current_time, 'Mouse', mouse_metrics])
 
-        time.sleep(60)
+            while self.running:
+                current_time = time.strftime('%Y-%m-%d %H:%M:%S')
 
-metrics_thread = Thread(target=save_metrics)
-metrics_thread.start()
+                if self.metric_name == 'CPU':
+                    cpu_percent = psutil.cpu_percent()
+
+                    writer.writerow([current_time, self.metric_name, cpu_percent])
+                elif self.metric_name == 'Mouse':
+
+                    mouse_listener = pynput.mouse.Listener(on_move=self.on_move)
+
+                    mouse_listener.start()
+
+                    time.sleep(self.interval)
+
+                    mouse_listener.stop()
+
+    def on_move(self, x, y):
+        pass
+
+
+cpu_thread = MetricsThread('CPU', 60)
+mouse_thread = MetricsThread('Mouse', 60)
+
+cpu_thread.start()
+mouse_thread.start()
+
+time.sleep(60)
+
+cpu_thread.running = False
+mouse_thread.running = False
+
+cpu_thread.join()
+mouse_thread.join()
